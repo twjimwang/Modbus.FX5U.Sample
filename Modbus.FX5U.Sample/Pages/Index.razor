@@ -1,0 +1,84 @@
+﻿@page "/"
+@using System.Net.Sockets
+@using NModbus
+
+
+<PageTitle>Index</PageTitle>
+
+<MudGrid>
+    <MudItem xs="12" sm="7">
+        <MudCard>
+            <MudCardContent>
+                <MudTextField Label="IP Adress" @bind-Value="Ip" For="@(() => Ip)" />
+                <MudTextField Label="Port" Class="mt-3" @bind-Value="Port" For="@(() => Port)" />
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" OnClick="OnValidSubmit" Class="ml-auto">連線</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="5">
+        <MudPaper Class="pa-4 mud-height-full">
+            @if (_success)
+            {
+                <MudSelect T="PLCAddress" Label="類型" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" @bind-value="_plcAddress">
+                    @foreach (var plcAddress in _plcAddresses)
+                    {
+                        <MudSelectItem Value="plcAddress">@plcAddress.Name</MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudNumericField @bind-Value="_addressPoint" Label="位置" Variant="Variant.Text" />
+
+                <MudButton Variant="Variant.Filled" Color="Color.Secondary" DisableElevation="true" OnClick="Read" Class="mx-2 mt-3">讀取</MudButton>
+                <MudTextField Value="_result" Label="結果" Variant="Variant.Text"></MudTextField>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+@code {
+
+    public string Ip { get; set; }
+
+    public string Port { get; set; }
+    readonly List<PLCAddress> _plcAddresses = new();
+    PLCAddress _plcAddress;
+    bool _success;
+    private TcpClient _tcpClient;
+    IModbusMaster _master;
+    int _addressPoint;
+    string _result;
+    int _slaveAddress;
+
+
+    protected override void OnInitialized()
+    {
+        _plcAddresses.Add(new PLCAddress { Name = "D", Offset = 0 });
+        _plcAddresses.Add(new PLCAddress { Name = "M", Offset = 8192 });
+    }
+
+    public async Task Read()
+    {
+        var address = (ushort)(_plcAddress.Offset + _addressPoint);
+        _result = _plcAddress.Name switch
+        {
+            "M" => (await _master.ReadCoilsAsync((byte)_slaveAddress, address, 1)).First().ToString(),
+            "D" => (await _master.ReadHoldingRegistersAsync((byte)_slaveAddress, address, 1)).First().ToString(),
+            _ => throw new ArgumentOutOfRangeException()
+        };
+    }
+
+    private void OnValidSubmit()
+    {
+        _tcpClient = new TcpClient(Ip, int.Parse(Port));
+        _master = new ModbusFactory().CreateMaster(_tcpClient);
+        _success = true;
+        StateHasChanged();
+    }
+
+    public class PLCAddress
+    {
+        public string Name { get; set; }
+        public int Offset { get; set; }
+    }
+}
